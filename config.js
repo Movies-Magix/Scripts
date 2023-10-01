@@ -168,18 +168,6 @@ const notFoundTemplate =
 </html>
 `;
 
-const deployTemplate =
-`#!/bin/bash
-
-# Set the API token
-export CLOUDFLARE_ACCOUNT_ID=5ad43fc97528b08ec797d05d748333ec
-export CLOUDFLARE_API_TOKEN=vYqyWlGZQw_Av16NH-r1X8531dk-d9S8mgYfWzv-
-
-# Deploy the Worker
-npx wrangler pages project create --project-name "tumse-na-ho-payega-0860" --production-branch "prod"
-npx wrangler pages deploy "Streams/Tumse-Na-Ho-Payega" --project-name "tumse-na-ho-payega-0860" --commit-message "for Tumse-Na-Ho-Payega"
-`
-
 export {
     headers,
     headerFile,
