@@ -8,10 +8,11 @@ if (!RegExp.escape)
 	string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 process.on("message", async (msg) => {
-	const allSegs = [];
-	const myId = msg.ID;
-	const m3u8Uri = msg.Uri;
 	const movName = msg.Name;
+	const m3u8Uri = msg.Uri;
+	const myId = msg.ID;
+	const allSegs = [];
+	let resURL = "";
 
 	if (msg.Type == 'Stop') {
 		console.log("Other instance errored");
@@ -21,10 +22,13 @@ process.on("message", async (msg) => {
 	if (msg.Type !== 'Start') return;
 	const workDir = `${movName}-${myId}`;
 	const m3u8TextResp = await (await fetch(m3u8Uri, { headers })).text();
-	let proccessedM3U8Txt = "";
 
 	m3u8TextResp.split("\n").forEach(hlsSegs => {
-		if (hlsSegs.includes(".ts")) allSegs.push(hlsSegs);
+		if (hlsSegs.includes(".ts")) {
+			if (!resURL) resURL = hlsSegs;
+			allSegs.push(hlsSegs);
+		}
+
 		if (!hlsSegs.includes(".key")) return;
 
 		const keyMatch = /URI="([^"]+)"/.exec(hlsSegs);
@@ -38,20 +42,20 @@ process.on("message", async (msg) => {
 			url: encUrl,
 			headers
 		}).download();
-
-		const baseRegex = /^(.*?\/(?:[^\/]*\/)*)/;
-		const queryRegex = /\?(.*)$/;
-		let bStr = "", qStr = "";
-
-		const baseMatch = baseRegex.exec(encUrl);
-		const queryMatch = queryRegex.exec(encUrl);
-		if (baseMatch && baseMatch[1]) bStr = baseMatch[1];
-		if (queryMatch && queryMatch[1]) qStr = "?" + queryMatch[1];
-
-		proccessedM3U8Txt = m3u8TextResp
-			.replace(new RegExp(RegExp.escape(bStr), "g"), "")
-			.replace(new RegExp(RegExp.escape(qStr), "g"), "");
 	});
+	
+	const baseRegex = /^(.*?\/(?:[^\/]*\/)*)/;
+	const queryRegex = /\?(.*)$/;
+	let bStr = "", qStr = "";
+
+	const baseMatch = baseRegex.exec(resURL);
+	const queryMatch = queryRegex.exec(resURL);
+	if (baseMatch && baseMatch[1]) bStr = baseMatch[1];
+	if (queryMatch && queryMatch[1]) qStr = "?" + queryMatch[1];
+
+	const proccessedM3U8Txt = m3u8TextResp
+		.replace(new RegExp(RegExp.escape(bStr), "g"), "")
+		.replace(new RegExp(RegExp.escape(qStr), "g"), "");
 
 	if (fs.existsSync(workDir)) {
 		fs.rmSync(workDir, {
@@ -72,7 +76,8 @@ process.on("message", async (msg) => {
 
 		dFiles.forEach(hfile => {
 			dlQueue.push((new Downloader({
-				onBeforeSave: () => process.send({ Type: 'Progress' }),
+				onProgress: (p) => parseInt(p) === 100 &&
+					process.send({ Type: 'Progress' }),
 				directory: workDir,
 				maxAttempts: 3,
 				url: hfile,

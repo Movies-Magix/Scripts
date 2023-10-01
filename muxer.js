@@ -11,9 +11,16 @@ const workDirs = {
 };
 
 if (movies.length === 0) {
-    console.log("Invalid args supplied to muxer");
+    console.log("[!]: Invalid args supplied to muxer");
     console.log("Exiting...");
     process.exit();
+}
+
+function createTimeStr(sec) {
+    const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+    const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+    const s = String(sec % 60).padStart(2, '0');
+    return `${h}:${m}:${s}.000`;
 }
 
 (async () => {
@@ -44,6 +51,7 @@ if (movies.length === 0) {
             console.log("[FFPROBE]: Collecting metadata....");
             const probeData = await probe(rawPth,
                 { path: probeStatic.path });
+            let vidDuration = 0;
 
             for (const stream of probeData.streams) {
                 const isAudStm = stream.codec_type === "audio";
@@ -51,6 +59,7 @@ if (movies.length === 0) {
                 const cmpFactor = isVidStm ? 0.9 : isAudStm ? 1.0 : 0.0;
 
                 if (isVidStm) {
+                    vidDuration = parseInt(stream.duration);
                     if (m3u8Data[level]["h"] !== 0) return;
                     m3u8Data[level]["h"] = stream.height;
                     m3u8Data[level]["w"] = stream.width;
@@ -60,15 +69,34 @@ if (movies.length === 0) {
                 m3u8Data[level]["bw"] += Math.floor(bitRate * cmpFactor);
             }
 
-            const toSegDir = `${baseDir}/${level}/seg.m3u8`;
+            const toSegDir = `${baseDir}/${level}`;
+            const segmentPath = toSegDir + '/seg.m3u8';
             console.log(`[FFMPEG]: Muxing '${level}' level of movie '${movie}'...`);
-            execSync(`ffmpeg -loglevel quiet -i ${rawPth} -c copy -hls_time 10 -hls_list_size 0 ${toSegDir}`);
+            execSync(`ffmpeg -loglevel quiet -i "${rawPth}" -c copy -hls_time 10 -hls_segment_filename "${toSegDir}/seg-%d.ts" -hls_list_size 0 "${segmentPath}"`);
 
-            console.log(`Post processing '${toSegDir}'...`); fs.unlinkSync(rawPth);
-            const segLines = fs.readFileSync(toSegDir, { encoding: 'utf-8' }).split('\n').map(segLine => segLine.trim());
+            if (level === 'sd') {
+                const vttContents = ["WEBVTT"];
+                const wdir = `${baseDir}/thumbs`; fs.mkdirSync(wdir);
+                console.log(`Generating preview thumbnails for '${movie}' [Can take upto 10 minutes]...`);
+                execSync(`ffmpeg -loglevel quiet -i "${rawPth}" -vf "fps=1/5,scale=160:-1" "${wdir}/scene-%d.png"`);
+                
+                for (let t = 0; t < (vidDuration - 5); t += 5) {
+                    vttContents.push('');
+                    const timeFrom = createTimeStr(t);
+                    const timeTo = createTimeStr(t + 5);
+                    vttContents.push(`${timeFrom} --> ${timeTo}`);
+                    vttContents.push(`scene-${(t / 5) + 1}.png`);
+                }
+                
+                fs.writeFileSync(`${wdir}/scene.vtt`,
+                    vttContents.join('\n'), { encoding: "utf-8" });
+            }
+
+            console.log(`Post processing '${segmentPath}'...`); fs.unlinkSync(rawPth);
+            const segLines = fs.readFileSync(segmentPath, { encoding: 'utf-8' }).split('\n').map(segLine => segLine.trim());
             segLines.splice(1, 0, '#EXT-X-ALLOW-CACHE:YES', '#EXT-X-PLAYLIST-TYPE:VOD');
-            fs.writeFileSync(toSegDir, segLines.join('\n'), { encoding: "utf-8" });
-            console.log(`Processing finished for '${toSegDir}'\n`);
+            fs.writeFileSync(segmentPath, segLines.join('\n'), { encoding: "utf-8" });
+            console.log(`Processing finished for '${segmentPath}'\n`);
         }
 
         const encoding = 'utf-8';

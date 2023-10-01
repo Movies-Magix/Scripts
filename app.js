@@ -23,7 +23,7 @@ let curLvl;
 let done;
 
 function doExit(msg = "") {
-    console.log(msg, '\nExiting...');
+    console.log(`[!]: ${msg}`, '\nExiting...');
     return process.exit();
 }
 
@@ -88,15 +88,14 @@ async function startNewLevel(lvlM3U8) {
 async function askUploader() {
     let upAns = await prompt('Start Uploader [y/(n)]? ');
     if (upAns.toLowerCase() !== 'y') return doExit();
-
-    const cfAuths = fs.readFileSync('auth.txt',
-        { encoding: "utf-8" }).trim().split("|");
-    const uploader = proc.fork('uploader.js', cfAuths);
-    uploader.on('close', () => doExit("Upload task completed!"));
+    const uploader = proc.fork('uploader.js');
+    uploader.on('close', () => doExit(
+        "Upload task completed!"
+    ));
 }
 
 async function askMuxer() {
-    if (await prompt("Start Muxing [y/(n)]? ") !== 'y') return;
+    if (await prompt("Start Muxing [y/(n)]? ") !== 'y') return doExit();
     console.log('Starting "muxer.js"....');
 
     const allMovies = new Set();
@@ -143,6 +142,21 @@ async function askMuxer() {
 }
 
 async function startMaster() {
+    function deleteIPynbCheckpoints(dir) {
+        const files = fs.readdirSync(dir);
+        
+        for (const file of files) {
+            const filePath = `${dir}/${file}`;
+            if (file === ".ipynb_checkpoints") {
+                recursiveDelete(filePath);
+                continue;
+            }
+            
+            if (fs.statSync(filePath).isDirectory())
+                deleteIPynbCheckpoints(filePath);
+        }
+    }
+
     function performDirChecks(onDir) {
         return (fs.existsSync(onDir) && fs.lstatSync(onDir)
             .isDirectory() && fs.readdirSync(onDir).length > 0);
@@ -158,23 +172,24 @@ async function startMaster() {
 
             // Read all entries(files or folders) inside of each movie directory
             const movieDirContents = fs.readdirSync(movieDir);
-            if (movieDirContents.length !== 5) return false;
+            if (movieDirContents.length !== 6) return false;
             let nonDirCount = 0, dirCount = 0;
 
             for (const bname of movieDirContents) {
                 const subCnt = `${movieDir}/${bname}`;
 
                 if (fs.lstatSync(subCnt).isDirectory()) {
-                    // Check if directory is named Either hd or sd
-                    if (++dirCount > 2 || !['sd', 'hd'].includes(bname)) return false;                    
+                    // Check if directory is name is well defined or not
+                    if (++dirCount > 3 || !['sd', 'hd', 'thumbs'].includes(bname)) return false;                    
                     const lastNest = fs.readdirSync(subCnt); // Last nesting level
+                    const totalFiles = lastNest.length - 1;
+                    const isThumbs = bname === 'thumbs';
 
-                    // Inside of ("hd" | "sd") there should be a "seg.m3u8" file
-                    if (!lastNest.includes("seg.m3u8")) return false;
-                    const totalTSFiles = lastNest.length - 1;
+                    // Inside of ("hd" | "sd") there should be a "seg.m3u8" file or "scene.vtt" file if it's thumbs directory
+                    if (!lastNest.includes(isThumbs ? "scene.vtt" : "seg.m3u8")) return false;
 
-                    for (let k = 0; k < totalTSFiles; k++) // Loop to check if all segments of stream are present in continous manner or not
-                        if (!fs.existsSync(`${subCnt}/seg${k}.ts`)) return false;
+                    for (let k = 0; k < totalFiles; k++) // Loop to check if all segments or scenes of stream are present in continous manner or not
+                        if (!fs.existsSync(`${subCnt}/${isThumbs ? "scene" : "seg"}-${k + (isThumbs ? 1 : 0)}.${isThumbs ? "png" : "ts"}`)) return false;
                 }
                 else {
                     if (++nonDirCount > 3 ||
@@ -184,8 +199,8 @@ async function startMaster() {
                 }
             }
 
-            if (nonDirCount !== 3 || dirCount !== 2)
-                return false; // There should be exactly 3 files and 2 folders
+            if (nonDirCount !== 3 || dirCount !== 3)
+                return false; // There should be exactly 3 files and 3 folders
         }
 
         return true;
@@ -207,6 +222,7 @@ async function startMaster() {
         }
     }
 
+    deleteIPynbCheckpoints('.');
     console.clear();
 
     try {
