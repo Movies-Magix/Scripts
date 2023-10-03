@@ -180,16 +180,21 @@ async function startMaster() {
 
                 if (fs.lstatSync(subCnt).isDirectory()) {
                     // Check if directory is name is well defined or not
-                    if (++dirCount > 3 || !['sd', 'hd', 'thumbs'].includes(bname)) return false;                    
+                    if (++dirCount > 3 || !['sd', 'hd', 'thumbnail'].includes(bname)) return false;                    
                     const lastNest = fs.readdirSync(subCnt); // Last nesting level
-                    const totalFiles = lastNest.length - 1;
-                    const isThumbs = bname === 'thumbs';
+                    const totalFileIndex = lastNest.length - 1;
+                    
+                    if (bname === 'thumbnail') {
+                        if (lastNest.length !== 2) return false;
+                        if (!lastNest.every(v => ['sprite.jpg', 'index.vtt'].includes(v))) return false;
+                        continue;
+                    }
 
-                    // Inside of ("hd" | "sd") there should be a "seg.m3u8" file or "scene.vtt" file if it's thumbs directory
-                    if (!lastNest.includes(isThumbs ? "scene.vtt" : "seg.m3u8")) return false;
+                    // Inside of ("hd" | "sd") there should be a "seg.m3u8" file
+                    if (!lastNest.includes("seg.m3u8")) return false;
 
-                    for (let k = 0; k < totalFiles; k++) // Loop to check if all segments or scenes of stream are present in continous manner or not
-                        if (!fs.existsSync(`${subCnt}/${isThumbs ? "scene" : "seg"}-${k + (isThumbs ? 1 : 0)}.${isThumbs ? "png" : "ts"}`)) return false;
+                    for (let k = 0; k < totalFileIndex; k++) // Loop to check if all segments of stream are present in continous manner or not
+                        if (!fs.existsSync(`${subCnt}/seg-${k}.ts`)) return false;
                 }
                 else {
                     if (++nonDirCount > 3 ||

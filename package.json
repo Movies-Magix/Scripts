@@ -4,17 +4,19 @@
 	"version": "2.1.0",
 	"author": "Rishabh Kumar",
 	"name": "movies-magix-scripts",
-	"description": "Movies-Magix Utilities",
-	"scripts": {
-		"start": "node app.js"
-	},
+	"description": "Movies-Magix utility to download process and upload movie video files",
+	"scripts": { "start": "node app.js" },
 	"dependencies": {
+		"moment": "2.29.4",
 		"dotenv": "^16.3.1",
 		"ffprobe": "^1.1.2",
 		"wrangler": "latest",
+		"fs-extra": "^11.1.1",
 		"node-fetch": "^3.3.0",
+		"fluent-ffmpeg": "^2.1.2",
 		"cli-progress": "^3.12.0",
 		"ffprobe-static": "^3.1.0",
+		"sprite-vtt-generator": "^1.1.1",
 		"nodejs-file-downloader": "^4.12.1"
 	}
 }

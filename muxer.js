@@ -2,6 +2,7 @@ import fs from "fs";
 import probe from "ffprobe";
 import probeStatic from "ffprobe-static";
 import { execSync } from "child_process";
+import { SpriteGenerator } from "./sprite-vtt-generator.js";
 import { headerFile, masterTemplate, notFoundTemplate } from "./config.js";
 
 const movies = process.argv.slice(2);
@@ -75,21 +76,24 @@ function createTimeStr(sec) {
             execSync(`ffmpeg -loglevel quiet -i "${rawPth}" -c copy -hls_time 10 -hls_segment_filename "${toSegDir}/seg-%d.ts" -hls_list_size 0 "${segmentPath}"`);
 
             if (level === 'sd') {
-                const vttContents = ["WEBVTT"];
-                const wdir = `${baseDir}/thumbs`; fs.mkdirSync(wdir);
-                console.log(`Generating preview thumbnails for '${movie}' [Can take upto 10 minutes]...`);
-                execSync(`ffmpeg -loglevel quiet -i "${rawPth}" -vf "fps=1/5,scale=160:-1" "${wdir}/scene-%d.png"`);
+                const wdir = `${baseDir}/thumbnail`;
+                const generator = new SpriteGenerator({
+                    thumbnailPrefix: 'sprite',
+                    inputPath: rawPth,
+                    outputDir: wdir,
+                    multiple: false,
+                    colCount: 15,
+                    interval: 20,
+                    height: 72,
+                    width: 128,
                 
-                for (let t = 0; t < (vidDuration - 5); t += 5) {
-                    vttContents.push('');
-                    const timeFrom = createTimeStr(t);
-                    const timeTo = createTimeStr(t + 5);
-                    vttContents.push(`${timeFrom} --> ${timeTo}`);
-                    vttContents.push(`scene-${(t / 5) + 1}.png`);
-                }
-                
-                fs.writeFileSync(`${wdir}/scene.vtt`,
-                    vttContents.join('\n'), { encoding: "utf-8" });
+                    webVTT: {
+                        path: `${wdir}/index.vtt`,
+                        required: true
+                    }
+                });
+
+                await generator.generate();
             }
 
             console.log(`Post processing '${segmentPath}'...`); fs.unlinkSync(rawPth);
